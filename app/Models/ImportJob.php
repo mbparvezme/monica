@@ -67,27 +67,27 @@ class ImportJob extends Model
         return $this->belongsTo(Vault::class);
     }
 
-    // public function progressPercentage(): int
-    // {
-    //     if ($this->total_rows === 0) {
-    //         return 0;
-    //     }
+    public function progressPercentage(): int
+    {
+        if ($this->total_rows === 0) {
+            return 0;
+        }
 
-    //     return (int) round(($this->processed_rows / $this->total_rows) * 100);
-    // }
+        return (int) round((($this->processed_rows + $this->failed_rows) / $this->total_rows) * 100);
+    }
 
-    // public function estimatedRemainingSeconds(): ?int
-    // {
-    //     if (! $this->started_at || $this->processed_rows === 0) {
-    //         return null;
-    //     }
+    public function estimatedRemainingSeconds(): ?int
+    {
+        if (! $this->started_at || $this->processed_rows === 0) {
+            return null;
+        }
 
-    //     $elapsed = now()->diffInSeconds($this->started_at);
-    //     $rowsRemaining = $this->total_rows - $this->processed_rows;
-    //     $secondsPerRow = $elapsed / $this->processed_rows;
+        $elapsed = now()->diffInSeconds($this->started_at);
+        $rowsRemaining = $this->total_rows - $this->processed_rows;
+        $secondsPerRow = $elapsed / $this->processed_rows;
 
-    //     return (int) round($rowsRemaining * $secondsPerRow);
-    // }
+        return (int) round($rowsRemaining * $secondsPerRow);
+    }
 
     public function isCancellable(): bool
     {

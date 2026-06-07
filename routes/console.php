@@ -27,3 +27,4 @@ Schedule::job(UpdateAddressBooks::class, 'hourly');
 Schedule::job(ProcessScheduledContactReminders::class, 'minutes', 1);
 Schedule::job(CleanSyncToken::class, 'daily');
 Schedule::job(CleanLogs::class, 'daily');
+Schedule::command('import:monitor', 'everyFiveMinutes');

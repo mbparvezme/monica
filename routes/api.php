@@ -1,5 +1,6 @@
 <?php
 
+use App\Domains\Import\Api\Controllers\ImportController;
 use App\Domains\Settings\ManageUsers\Api\Controllers\UserController;
 use App\Domains\Vault\ManageVault\Api\Controllers\VaultController;
 use Illuminate\Support\Facades\Route;
@@ -22,4 +23,11 @@ Route::middleware('auth:sanctum')->name('api.')->group(function () {
 
     // vaults
     Route::apiResource('vaults', VaultController::class);
+
+    // imports
+    Route::get('import', [ImportController::class, 'index'])->name('import.index');
+    Route::post('import', [ImportController::class, 'store'])->name('import.store');
+    Route::get('import/{importId}', [ImportController::class, 'show'])->name('import.show');
+    Route::post('import/{importId}/cancel', [ImportController::class, 'cancel'])->name('import.cancel');
+    Route::get('import/{importId}/errors', [ImportController::class, 'errors'])->name('import.errors');
 });
