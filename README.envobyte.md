@@ -1,4 +1,3 @@
-
 # Contact Import — Envobyte Assignment
 
 ## Setup
@@ -14,11 +13,11 @@ php artisan queue:work --queue=imports
 php artisan serve
 ```
 
-To run the stuck-import monitor manually: `php artisan import:monitor`. It also runs on the scheduler every 5 minutes via `php artisan schedule:run`.
+> To get a Sanctum token and vault ID for testing: `php artisan import:token`
 
 ## How it works
 
-Upload a CSV to `POST /api/import` with a vault ID. You immediately get back a job record with a `pending` status and an ID you can poll. In the background, the CSV is split into chunks of 50 rows, each dispatched as a separate queued job. Per-row errors are recorded individually so a bad email on row 40 doesn't kill the rest of the file. When everything finishes the status flips to `completed` (or `failed` if literally every row errored).
+Upload a CSV to `POST /api/import` with a vault ID. You get back a job ID and can poll progress. In the background the CSV is split into chunks of 50 rows, each a separate queued job. Bad rows are recorded and skipped — a bad email on row 40 doesn't stop the rest.
 
 ## API
 
@@ -28,39 +27,36 @@ Upload a CSV to `POST /api/import` with a vault ID. You immediately get back a j
 | GET | `/api/import` | list your imports |
 | GET | `/api/import/{id}` | check progress |
 | POST | `/api/import/{id}/cancel` | cancel if still running |
-| GET | `/api/import/{id}/errors.csv` | download failed rows with error message |
+| GET | `/api/import/{id}/errors.csv` | download failed rows with error column |
 
-> For Sanctum auth token and vault IDs, you can use the following artisan command `php artisan auth:token`
+## Notes & decisions
 
-## Assumptions
+- `vault_id` is required — Monica stores contacts inside vaults. I missed this in the first migration so there's a second one that adds the column.
+- Progress is tracked in the DB, not Redis. Monica is self-hosted and many instances won't have Redis. A primary-key lookup on `import_jobs` is fast enough.
+- Batch size is 50. Small enough to keep memory low, large enough that a 1000-row file doesn't flood the queue with 100 jobs.
+- Raw CSV rows are stored as JSON on the import job so the error CSV can be reconstructed without touching the contacts table.
 
-First I tried to upload the contact without vault ID. But it doesn't work as Monica store the contact inside vault. I only realised this after writing the initial migration, so there's a second migration that adds the column.
+## Tests
 
-The CSV should have a `name` column (or `first_name`). Email is optional but validated if present. Files go to `storage/app/imports/`.
-
-## A few decisions worth explaining
-
-**Why not Redis for progress tracking** — I thought about this. Redis would be faster for the counter updates, but Monica is self-hosted and a lot of instances won't have Redis. Storing progress in the DB means one extra write per batch but the progress endpoint is just a primary-key lookup so it's still fast. Also if a worker crashes, Redis state is gone whereas the DB survives.
-
-**Batch size of 50** — Honestly picked this as a reasonable middle ground. 10 rows per job would give smoother progress updates but creates too many queue entries. 200 uses more memory and makes progress feel choppy on smaller files. 50 seemed right for a personal CRM where files are typically a few hundred rows.
-
-**Raw data stored in the DB** — The parsed CSV rows get saved as JSON on the import job at upload time. This means batch jobs don't need to touch the file on disk, and it's how the error CSV gets reconstructed later without joining against the contacts table. The downside is that a 10k-row file could put a few MB in the `raw_data` column. Fine for personal use, probably not for production at scale.
+```bash
+php artisan test tests/Unit/Domains/Import
+```
 
 ## Observability
 
-The monitor command checks for stuck imports (anything in `processing` for over 30 minutes) and logs a critical alert if the failure rate across the last hour is over 20%.
+`php artisan import:monitor` — runs automatically every 5 minutes via the scheduler, or manually.
 
-Queries behind it:
+Marks stuck imports as failed (processing for 30+ min):
 
 ```sql
--- stuck imports
 SELECT * FROM import_jobs
 WHERE status = 'processing'
   AND started_at < NOW() - INTERVAL 30 MINUTE;
 ```
 
+Alerts if row failure rate exceeds 20% in the last hour:
+
 ```sql
--- failure rate over last hour
 SELECT
     SUM(failed_rows) / NULLIF(SUM(total_rows), 0) * 100 AS failure_rate_pct
 FROM import_jobs
