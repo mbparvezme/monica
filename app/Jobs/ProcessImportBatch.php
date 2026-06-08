@@ -44,7 +44,7 @@ class ProcessImportBatch implements ShouldQueue
 
         $importJob = ImportJob::find($this->importJobId);
 
-        if (! $importJob || $importJob->status === ImportJob::STATUS_CANCELLED) {
+        if (! $importJob || in_array($importJob->status, [ImportJob::STATUS_CANCELLED, ImportJob::STATUS_FAILED])) {
             return;
         }
 
